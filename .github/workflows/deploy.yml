@@ -15,9 +15,9 @@ env:
   SERVICE_NAME: "demo-app"
   
   # Paste values from Step 2 & Step 5
-  WORKLOAD_IDENTITY_PROVIDER: "projects/YOUR_PROJECT_NUMBER/locations/global/workloadIdentityPools/github-actions-pool/providers/github-provider"
-  SERVICE_ACCOUNT: "github-actions-deployer@YOUR_GCP_PROJECT_ID.iam.gserviceaccount.com"
-  ARTIFACT_REGISTRY: "us-central1-docker.pkg.dev/YOUR_GCP_PROJECT_ID/devops-lab-repo"
+  WORKLOAD_IDENTITY_PROVIDER: "projects/204216084864/locations/global/workloadIdentityPools/github-actions-pool/providers/github-provider"
+  SERVICE_ACCOUNT: "github-actions-deployer@kubernetestest-494210.iam.gserviceaccount.com"
+  ARTIFACT_REGISTRY: "us-central1-docker.pkg.dev/kubernetestest-494210/devops-lab-repo"
 
 jobs:
   build-and-deploy:
