@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 env:
-  PROJECT_ID: "YOUR_GCP_PROJECT_ID"
+  PROJECT_ID: "kubernetestest-494210"
   REGION: "us-central1"
   SERVICE_NAME: "demo-app"
   
