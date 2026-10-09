@@ -1,0 +1,65 @@
+name: Secure CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+
+# Required for GitHub OIDC authentication
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  PROJECT_ID: "YOUR_GCP_PROJECT_ID"                   # Replace with your GCP Project ID
+  REGION: "us-central1"
+  SERVICE_NAME: "demo-app"
+  
+  # Populate from Terraform outputs
+  WORKLOAD_IDENTITY_PROVIDER: "projects/123456789/locations/global/workloadIdentityPools/github-actions-pool/providers/github-provider"
+  SERVICE_ACCOUNT: "github-actions-deployer@YOUR_GCP_PROJECT_ID.iam.gserviceaccount.com"
+  ARTIFACT_REGISTRY: "us-central1-docker.pkg.dev/YOUR_GCP_PROJECT_ID/devops-lab-repo"
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # 1. Authenticate to GCP using Workload Identity Federation (No Key Files)
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ env.SERVICE_ACCOUNT }}
+
+      # 2. Set up Cloud SDK
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      # 3. Configure Docker authentication for Artifact Registry
+      - name: Authorize Docker for GCP Artifact Registry
+        run: |
+          gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev
+
+      # 4. Build and Push Container Image
+      - name: Build and Push Docker Image
+        run: |
+          IMAGE_TAG="${{ env.ARTIFACT_REGISTRY }}/${{ env.SERVICE_NAME }}:${{ github.sha }}"
+          
+          docker build -t $IMAGE_TAG .
+          docker push $IMAGE_TAG
+          
+          echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
+
+      # 5. Deploy to Cloud Run
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy ${{ env.SERVICE_NAME }} \
+            --image=${{ env.IMAGE_TAG }} \
+            --region=${{ env.REGION }} \
+            --platform=managed \
+            --allow-unauthenticated
