@@ -1,20 +1,15 @@
-name: Secure CI/CD Pipeline (GUI Setup)
+name: Secure CI/CD Pipeline
 
 on:
   push:
     branches:
       - main
-
-permissions:
-  id-token: write
-  contents: read
+  workflow_dispatch:
 
 env:
   PROJECT_ID: "kubernetestest-494210"
   REGION: "us-central1"
   SERVICE_NAME: "demo-app"
-  
-  # Paste values from Step 2 & Step 5
   WORKLOAD_IDENTITY_PROVIDER: "projects/204216084864/locations/global/workloadIdentityPools/github-actions-pool-010/providers/github-provider"
   SERVICE_ACCOUNT: "github-actions-deployer@kubernetestest-494210.iam.gserviceaccount.com"
   ARTIFACT_REGISTRY: "us-central1-docker.pkg.dev/kubernetestest-494210/devops-lab-repo"
@@ -22,26 +17,35 @@ env:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    
+    # Required permissions for OIDC authentication
+    permissions:
+      contents: read
+      id-token: write
 
     steps:
+      # 1. Checkout repository source code
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      # 2. Keyless Authentication via Workload Identity Federation
       - name: Authenticate to Google Cloud
         id: auth
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ env.WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ env.SERVICE_ACCOUNT }}
-          create_credentials_file: true
+          token_format: 'access_token'
 
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
+      # 3. Authenticate Docker using short-lived access token
+      - name: Log in to GCP Artifact Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGION }}-docker.pkg.dev
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
 
-      - name: Authorize Docker for GCP Artifact Registry
-        run: |
-          gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
-
+      # 4. Build Docker container and push to Artifact Registry
       - name: Build and Push Docker Image
         run: |
           IMAGE_TAG="${{ env.ARTIFACT_REGISTRY }}/${{ env.SERVICE_NAME }}:${{ github.sha }}"
@@ -49,10 +53,11 @@ jobs:
           docker push $IMAGE_TAG
           echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
 
+      # 5. Deploy container to Google Cloud Run
       - name: Deploy to Cloud Run
-        run: |
-          gcloud run deploy ${{ env.SERVICE_NAME }} \
-            --image=${{ env.IMAGE_TAG }} \
-            --region=${{ env.REGION }} \
-            --platform=managed \
-            --allow-unauthenticated
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ env.SERVICE_NAME }}
+          region: ${{ env.REGION }}
+          image: ${{ env.ARTIFACT_REGISTRY }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
+          flags: '--allow-unauthenticated'
